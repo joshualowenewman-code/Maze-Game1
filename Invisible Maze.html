@@ -49,6 +49,17 @@ function scareSound() {
   const src = ac.createBufferSource(), g = ac.createGain(); g.gain.value = 0.35;
   src.buffer = buf; src.connect(g).connect(ac.destination); src.start();
 }
+let oneCount = 0, oneLast = 0, reveal = false;
+function winMelody() {
+  if (!ac) return;
+  const song = [[196,.16],[165,.16],[131,.16],[165,.16],[196,.3],[196,.16],[110,.16],[131,.16],[147,.16],[165,.3],[98,.2],[104,.2],[98,.5]];
+  let d = 0;
+  for (const [f, len] of song) {
+    tone('square', f, f * 0.96, len * 1.1, 0.14, d);
+    tone('triangle', f * 2, f * 1.9, len * 1.1, 0.08, d);
+    d += len;
+  }
+}
 function showScare() {
   scaring = true; scareSound();
   const el = document.getElementById('scare'); el.style.display = 'flex';
@@ -100,7 +111,7 @@ function newLevel() {
     const y = 1 + Math.floor(Math.random() * (rows - 2));
     maze[y][x] = false;
   }
-  px = 1; py = 1; winT = 0; hintT = level === 1 ? performance.now() : 0;
+  px = 1; py = 1; winT = 0; reveal = false; hintT = level === 1 ? performance.now() : 0;
   newColors();
 }
 
@@ -111,12 +122,17 @@ function move(dx, dy) {
     shake = 1; shakeDir = [dx, dy]; bumpSound(); return;
   }
   px = nx; py = ny; hintT = 0;
-  if (px === cols - 2 && py === rows - 2) winT = performance.now();
+  if (px === cols - 2 && py === rows - 2) { winT = performance.now(); winMelody(); }
 }
 
 addEventListener('keydown', e => {
   const m = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
-  if (m) { e.preventDefault(); unlock(); move(...m); }
+  if (m) { e.preventDefault(); unlock(); oneCount = 0; move(...m); }
+  else if (e.key === '1') {
+    unlock(); const n = performance.now();
+    oneCount = n - oneLast > 1500 ? 1 : oneCount + 1; oneLast = n;
+    if (oneCount >= 5) { oneCount = 0; reveal = !reveal; }
+  } else oneCount = 0;
 });
 
 let t0 = null;
@@ -138,9 +154,17 @@ function draw(now) {
   if (shake > 0) { sx = shakeDir[0] * shake * 4; sy = shakeDir[1] * shake * 4; shake -= 0.15; }
   let scale = 1;
   if (winT) {
-    const p = (now - winT) / 600;
-    scale = 1 + p * 14;
+    const p = (now - winT) / 1900;
+    scale = 1 + p * p * 14;
     if (p >= 1 && !scaring) showScare();
+  }
+  if (reveal) {
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++)
+      if (maze[y][x]) ctx.fillRect(ox + x * cell, oy + y * cell, cell, cell);
+    ctx.fillStyle = fg; ctx.globalAlpha = 0.45;
+    ctx.fillRect(ox + (cols - 2) * cell, oy + (rows - 2) * cell, cell, cell);
+    ctx.globalAlpha = 1;
   }
   const s = cell * scale, cx = ox + px * cell + cell / 2 + sx, cy = oy + py * cell + cell / 2 + sy;
   ctx.fillStyle = fg; ctx.fillRect(cx - s / 2, cy - s / 2, s, s);
